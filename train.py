@@ -30,13 +30,11 @@ def run_train(args):
         return
 
     if 'data' in config.keys():
-        config['data']['loader']['num_workers'] = args.n_jobs
         if args.gpus > 0:
             config['data']['loader']['batch_size'] = config['data']['loader']['batch_size'] // args.gpus
         else:
             config['data']['loader']['batch_size'] = 1
     else:
-        config['loader']['num_workers'] = args.n_jobs
         if args.gpus > 0:
             config['loader']['batch_size'] = config['loader']['batch_size'] // args.gpus
         else:
@@ -49,7 +47,7 @@ def run_train(args):
     else:
         ckpt_path = None
 
-    dm = CIFAR100DataModule()
+    dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
 
     if config['model_type'] == 'ResNet':
         model = CIFAR100_Resnet(config['model_size'], config['norm'])
@@ -102,7 +100,7 @@ def cli_main():
         help="Number of GPUs per node to use for training. (Default: 4)",
     )
     parser.add_argument(
-    "--n_jobs",
+    "--num_workers",
     default=0,
     type=int,
     help="Number of CPUs for dataloader. (Default: 0)",

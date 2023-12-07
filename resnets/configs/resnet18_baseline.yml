@@ -1,7 +1,7 @@
 data:
   num_classes: 100
   loader:
-    batch_size: 256 
+    batch_size: 128 
 
 model_type: 'ResNet'
 model_size: 'ResNet18'
