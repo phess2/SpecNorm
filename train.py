@@ -10,7 +10,6 @@ import os
 
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.plugins import DDPPlugin
 from src.classifiers import *
 from corpus.CIFAR100_dataset import *
 
@@ -50,25 +49,27 @@ def run_train(args):
     dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
 
     if config['model_type'] == 'ResNet':
-        model = CIFAR100_Resnet(config['model_size'], config['norm'])
+        if ckpt_path is not None:
+            model = CIFAR100_Resnet.load_from_checkpoint(checkpoint_path=ckpt_path, model_size=config['model_size'], norm=config['norm_type'])
+        else:
+            model = CIFAR100_Resnet(config['model_size'], config['norm_type'])
     else:
-        model = CIFAR100_MLP(config['num_layers'], config['width'], config['norm'])
+        if ckpt_path is not None:
+            model = CIFAR100_MLP.load_from_checkpoint(checkpoint_path=ckpt_path, num_layers=config['num_layers'], width=config['width'], norm=config['norm_type'])
+        else:
+            model = CIFAR100_MLP(config['num_layers'], config['width'], config['norm_type'])
     os.makedirs(checkpoint_dir, exist_ok=True)
-    checkpoint_callback = ModelCheckpoint(filepath=checkpoint_dir)
+    checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_dir, every_n_epochs=1, save_top_k=-1, verbose=True)
     trainer = Trainer(default_root_dir=args.exp_dir, 
-                      checkpoint_callback=checkpoint_callback, 
-                      gpus=args.gpus, 
+                      callbacks=checkpoint_callback, 
+                      devices=args.gpus, 
                       num_nodes=args.num_nodes, 
                       max_epochs=config['hparas']['epochs'],
                       detect_anomaly=True,
                       accelerator="gpu" if args.gpus > 0 else 'cpu',
-                      strategy=DDPPlugin(find_unused_parameters=False)
                       )
-    if ckpt_path is not None:
-        model = model.load_from_checkpoint(checkpoint_path=ckpt_path)
-    else:
-        trainer.fit(model, dm)
-        trainer.save_checkpoint(checkpoint_dir + 'final.ckpt')
+    trainer.fit(model, dm)
+    trainer.save_checkpoint(checkpoint_dir / 'final.ckpt')
     trainer.test(model, datamodule = dm)
 
 
@@ -104,12 +105,6 @@ def cli_main():
     default=0,
     type=int,
     help="Number of CPUs for dataloader. (Default: 0)",
-    )
-    parser.add_argument(
-        "--resume_training",
-        default=False,
-        action='store_true',
-        help="Continue training from checkpoint",
     )
     args = parser.parse_args()
 

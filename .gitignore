@@ -1,1 +1,6 @@
 outLogs
+*.pyc
+resnets/lightning_logs/*
+resnets/resnet18_frob/lightning_logs/*
+workspace/*
+*.ckpt

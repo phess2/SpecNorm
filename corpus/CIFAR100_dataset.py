@@ -22,7 +22,7 @@ class CIFAR100DataModule(pl.LightningDataModule):
         datasets.CIFAR100(root='./workspace/datasets/cifar100', train=True, download=True, transform=self.transform)
         datasets.CIFAR100(root='./workspace/datasets/cifar100', train=False, download=True, transform=self.transform)
 
-    def setup(self):
+    def setup(self, stage):
         cifar_train = datasets.CIFAR100(root='./workspace/datasets/cifar100', train=True, download=True, transform=self.transform)
         self.cifar_test = datasets.CIFAR100(root='./workspace/datasets/cifar100', train=False, download=True, transform=self.transform)
         self.cifar_train = cifar_train
