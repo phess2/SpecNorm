@@ -15,6 +15,7 @@ from corpus.CIFAR100_dataset import *
 
 hostname = socket.gethostname()
 seed_everything(1)
+torch.set_float32_matmul_precision('medium')
 
 
 def run_train(args):
@@ -39,7 +40,11 @@ def run_train(args):
         else:
             config['data']['loader']['batch_size'] = 1
 
-    checkpoint_dir = args.exp_dir / "checkpoints"
+    if config['model_type'] == 'ResNet':
+        exp_dir = pathlib.Path(f"{config['model_type']}" + "/" + f"{config['model_size']}_{config['norm_type']}")
+    else:
+        exp_dir = pathlib.Path(f"{config['model_type']}" + "/" + f"{config['num_layers']}_{config['width']}_{config['norm_type']}")
+    checkpoint_dir = exp_dir / "checkpoints"
 
     if args.ckpt_path != '':
         ckpt_path = checkpoint_dir / args.ckpt_path
@@ -60,12 +65,11 @@ def run_train(args):
             model = CIFAR100_MLP(config['num_layers'], config['width'], config['norm_type'])
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_dir, every_n_epochs=1, save_top_k=-1, verbose=True)
-    trainer = Trainer(default_root_dir=args.exp_dir, 
+    trainer = Trainer(default_root_dir=exp_dir, 
                       callbacks=checkpoint_callback, 
                       devices=args.gpus, 
                       num_nodes=args.num_nodes, 
                       max_epochs=config['hparas']['epochs'],
-                      detect_anomaly=True,
                       accelerator="gpu" if args.gpus > 0 else 'cpu',
                       )
     trainer.fit(model, dm)
@@ -76,12 +80,6 @@ def run_train(args):
 def cli_main():
     parser = ArgumentParser()
     parser.add_argument('--config', type=str, help='Path to experiment config.')
-    parser.add_argument(
-        "--exp_dir",
-        default=pathlib.Path("./exp"),
-        type=pathlib.Path,
-        help="Directory to save checkpoints and logs to. (Default: './exp')",
-    )
     parser.add_argument(
         "--ckpt_path",
         default='',

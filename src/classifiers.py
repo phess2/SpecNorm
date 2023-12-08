@@ -34,11 +34,25 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
             self.manual_backward(loss)
             opt.step()
             if self.norm_type == 'frob':
-                for i, p in enumerate(self.parameters()):
-                    p.data = p.data / torch.norm(p.data, p='fro') * self.target_norms[i]
+                for i, named_data in enumerate(self.named_parameters()):
+                    name, param = named_data
+                    if 'bn' in name or 'bias' in name:
+                        continue
+                    else:
+                        param.data /= (torch.norm(param.data, p='fro') * self.target_norms[i])
             else:
-                for i, p in enumerate(self.parameters()):
-                    p.data = p.data / self.spectral_norm(p) * self.target_norms[i]
+                for i, named_data in enumerate(self.named_parameters()):
+                    name, param = named_data
+                    if 'bn' in name or 'bias' in name:
+                        continue
+                    else:
+                        u, s, v = torch.linalg.svd(param.data, full_matrices=False)
+                        first_left = u[:,0]
+                        first_right = v[0, :]
+                        first_val = s[0]
+                        change = self.target_norms[i] - first_val
+                        outer = torch.outer(first_left, first_right)
+                        param.data += (change * outer)
         else:
             loss = F.cross_entropy(output,target)
         tensorboard_logs = {'train_loss':loss}
@@ -82,18 +96,44 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         self.test_step_outputs.clear()
         return {'avg_test_loss': avg_loss, 'log': tensorboard_logs}
 
-    def get_target_frob_norms(self):
-        return [torch.norm(w, p='fro') for w in self.parameters()]
+    def init_orthonormal(self):
+        layer_idx = 0
+        for idx, data in enumerate(self.named_parameters()):
+            name, param = data
+            if param.requires_grad:
+                if 'bn' in name or 'bias' in name:
+                    continue
+                else:
+                    nn.init.orthogonal_(param)
+                    in_size = self.layer_sizes[layer_idx]
+                    out_size = self.layer_sizes[layer_idx+1]
+                    param.data *= (out_size / in_size)**0.5
+                    layer_idx += 1
 
-    def spectral_norm(self, w, n_steps=10):
-        v = torch.randn(w.shape[1], device=w.device)
-        for _ in range(n_steps):
-            v /= v.norm()
-            v = w @ v @ w
-        return v.norm().sqrt()
+    def get_target_frob_norms(self):
+        target_norms = dict()
+        for idx, data in enumerate(self.named_parameters()):
+            name, param = data
+            if param.requires_grad:
+                if 'bn' in name or 'bias' in name:
+                    continue
+                else:
+                    frob_norm = torch.norm(param, p='fro')
+                    target_norms[idx] = frob_norm.item()
+        return target_norms
 
     def get_target_spec_norms(self):
-        return [self.spectral_norm(w) for w in self.parameters()]
+        target_norms = dict()
+        layer_idx = 0
+        for idx, data in enumerate(self.named_parameters()):
+            name, param = data
+            if param.requires_grad:
+                if 'bn' in name or 'bias' in name:
+                    continue
+                else:
+                    spec_norm = (self.layer_sizes[layer_idx+1] / self.layer_sizes[layer_idx])**0.5
+                    target_norms[idx] = spec_norm
+        return target_norms
 
 
 class CIFAR100_Resnet(CIFAR100_LIGHTNING):
@@ -112,6 +152,8 @@ class CIFAR100_Resnet(CIFAR100_LIGHTNING):
         self.model.fc = nn.Linear(512, 100)
         del self.model.maxpool
         self.model.maxpool = lambda x : x
+        #TODO: get layer sizes
+        self.init_orthonormal()
 
         if self.norm_type == 'frob':
             self.target_norms = self.get_target_frob_norms()
@@ -129,15 +171,17 @@ class CIFAR100_MLP(CIFAR100_LIGHTNING):
         super(CIFAR100_MLP, self).__init__(norm)
         self.num_layers = num_layers
         self.width = width
+
         self.layer_sizes = [3 * 32 * 32, width]
-        net = [nn.flatten(), nn.Linear(self.layer_sizes[0], self.width), nn.ReLU()]
+        net = [nn.Flatten(), nn.Linear(self.layer_sizes[0], self.width), nn.ReLU()]
         for i in range(num_layers -2):
             self.layer_sizes.append(width)
-            net.append([nn.Linear(width, width), nn.ReLU()])
+            net.extend([nn.Linear(width, width), nn.ReLU()])
         self.layer_sizes.append(100)
         net.append(nn.Linear(width, 100))
         self.model = nn.Sequential(*net)
         self.softmax = nn.Softmax(dim=1)
+        self.init_orthonormal()
 
         if self.norm_type == 'frob':
             self.target_norms = self.get_target_frob_norms()
