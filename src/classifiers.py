@@ -24,6 +24,13 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         output = self.model(x)
         return output
 
+    def power_iteration(self, A, n_steps=100):
+        v = torch.randn(A.shape[1], device=A.device)
+        for _ in range(n_steps):
+            v /= v.norm()
+            v = A@v
+        return v.norm().sqrt(), v / v.norm()
+    
     def training_step(self, batch, batch_idx):
         data, target = batch
         output = self.forward(data)
@@ -46,12 +53,10 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
                     if 'bn' in name or 'bias' in name:
                         continue
                     else:
-                        u, s, v = torch.linalg.svd(param.data, full_matrices=False)
-                        first_left = u[:,0]
-                        first_right = v[0, :]
-                        first_val = s[0]
+                        first_val, right_vec = self.power_iteration(param.data.T@param.data)
+                        left_vec = param.data@right_vec/first_val
                         change = self.target_norms[i] - first_val
-                        outer = torch.outer(first_left, first_right)
+                        outer = torch.outer(left_vec, right_vec)
                         param.data += (change * outer)
         else:
             loss = F.cross_entropy(output,target)
