@@ -1,0 +1,11 @@
+data:
+  num_classes: 100
+  loader:
+    batch_size: 512
+
+model_type: 'MLP'
+num_layers: 5
+width: 2000
+norm_type: 'frob'
+hparas:                                   # Experiment hyper-parameters
+  epochs: 200

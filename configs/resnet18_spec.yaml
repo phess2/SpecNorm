@@ -1,0 +1,10 @@
+data:
+  num_classes: 100
+  loader:
+    batch_size: 512
+
+model_type: 'ResNet'
+model_size: 'ResNet18'
+norm_type: 'spec'
+hparas:                                   # Experiment hyper-parameters
+  epochs: 50
