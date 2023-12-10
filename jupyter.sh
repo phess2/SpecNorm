@@ -6,7 +6,7 @@
 #SBATCH --time=6:00:00
 #SBATCH --partition=mcdermott
 #SBATCH --cpus-per-task=1
-#SBATCH -x node043
+#SBATCH -x node061
 
 source /etc/profile.d/modules.sh
 module use /cm/shared/modulefiles

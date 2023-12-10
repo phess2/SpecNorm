@@ -1,5 +1,6 @@
 # modified from: https://github.com/LJY-HY/cifar_pytorch-lightning/blob/master/models/classifiers.py
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler
@@ -24,13 +25,6 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         output = self.model(x)
         return output
 
-    def power_iteration(self, A, n_steps=100):
-        v = torch.randn(A.shape[1], device=A.device)
-        for _ in range(n_steps):
-            v /= v.norm()
-            v = A@v
-        return v.norm().sqrt(), v / v.norm()
-    
     def training_step(self, batch, batch_idx):
         data, target = batch
         output = self.forward(data)
@@ -43,14 +37,14 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
             if self.norm_type == 'frob':
                 for i, named_data in enumerate(self.named_parameters()):
                     name, param = named_data
-                    if 'bn' in name or 'bias' in name:
+                    if 'bn' in name or 'bias' in name or 'downsample' in name:
                         continue
                     else:
                         param.data /= (torch.norm(param.data, p='fro') * self.target_norms[i])
             else:
                 for i, named_data in enumerate(self.named_parameters()):
                     name, param = named_data
-                    if 'bn' in name or 'bias' in name:
+                    if 'bn' in name or 'bias' in name or 'downsample' in name:
                         continue
                     else:
                         first_val, right_vec = self.power_iteration(param.data.T@param.data)
@@ -106,21 +100,23 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         for idx, data in enumerate(self.named_parameters()):
             name, param = data
             if param.requires_grad:
-                if 'bn' in name or 'bias' in name:
+                if 'bn' in name or 'bias' in name or 'downsample' in name:
                     continue
                 else:
+                    print(name)
                     nn.init.orthogonal_(param)
                     in_size = self.layer_sizes[layer_idx]
                     out_size = self.layer_sizes[layer_idx+1]
                     param.data *= (out_size / in_size)**0.5
                     layer_idx += 1
+        # print('final_idx:', layer_idx)
 
     def get_target_frob_norms(self):
         target_norms = dict()
         for idx, data in enumerate(self.named_parameters()):
             name, param = data
             if param.requires_grad:
-                if 'bn' in name or 'bias' in name:
+                if 'bn' in name or 'bias' in name or 'downsample' in name:
                     continue
                 else:
                     frob_norm = torch.norm(param, p='fro')
@@ -133,12 +129,19 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         for idx, data in enumerate(self.named_parameters()):
             name, param = data
             if param.requires_grad:
-                if 'bn' in name or 'bias' in name:
+                if 'bn' in name or 'bias' in name or 'downsample' in name:
                     continue
                 else:
                     spec_norm = (self.layer_sizes[layer_idx+1] / self.layer_sizes[layer_idx])**0.5
                     target_norms[idx] = spec_norm
         return target_norms
+
+    def power_iteration(self, A, n_steps=500):
+        v = torch.randn(A.shape[1], device=A.device)
+        for _ in range(n_steps):
+            v /= v.norm()
+            v = A@v
+        return v.norm().sqrt(), v / v.norm()
 
 
 class CIFAR100_Resnet(CIFAR100_LIGHTNING):
@@ -154,12 +157,17 @@ class CIFAR100_Resnet(CIFAR100_LIGHTNING):
         self.model.inplanes=64
         self.model.conv1 = nn.Conv2d(3,64,kernel_size=3,stride=1,padding=1,bias=False)
         self.model.bn1 = nn.BatchNorm2d(64)
-        self.model.fc = nn.Linear(512, 100)
+        if model_size == 'ResNet18' or model_size == 'ResNet34':
+            self.model.fc = nn.Linear(512, 100)
+        else:
+            self.model.fc = nn.Linear(512*Resnet.Bottleneck.expansion, 100)
         del self.model.maxpool
         self.model.maxpool = lambda x : x
-        #TODO: get layer sizes
+        self.layer_sizes = self.resnet_layer_sizes(model_size)
         self.init_orthonormal()
+        print('layer_sizes:', self.layer_sizes)
 
+        self.automatic_optimization = True
         if self.norm_type == 'frob':
             self.target_norms = self.get_target_frob_norms()
             self.automatic_optimization = False
@@ -168,6 +176,42 @@ class CIFAR100_Resnet(CIFAR100_LIGHTNING):
             self.automatic_optimization = False
         else:
             self.target_norms = None
+
+    def resnet_layer_sizes(self, resnet_size):
+        layer_list = [[3, 32, 32], [64, 32, 32]]
+        if resnet_size == 'ResNet18':
+            for i in range(4):
+                layer_list.append([64, 32, 32])
+            for i in range(4):
+                layer_list.append([128, 16, 16])
+            for i in range(4):
+                layer_list.append([256, 8, 8])
+            for i in range(4):
+                layer_list.append([512, 4, 4])
+        if resnet_size == 'ResNet34':
+            for i in range(6):
+                layer_list.append([64, 32, 32])
+            for i in range(8):
+                layer_list.append([128, 16, 16])
+            for i in range(12):
+                layer_list.append([256, 8, 8])
+            for i in range(6):
+                layer_list.append([512, 4, 4])
+        if resnet_size == 'ResNet50':
+            for i in range(3):
+                layer_list.extend([[64, 32, 32], [64, 32, 32], [256, 32, 32]])
+            layer_list.extend([[128, 32, 32], [128, 16, 16], [512, 16, 16]])
+            for i in range(3):
+                layer_list.extend([[128, 16, 16], [128, 16, 16], [512, 16, 16]])
+            layer_list.extend([[256, 16, 16], [256, 8, 8], [1024, 8, 8]])
+            for i in range(5):
+                layer_list.extend([[256, 8, 8], [256, 8, 8], [1024, 8, 8]])
+            layer_list.extend([[512, 8, 8], [512, 4, 4], [2048, 4, 4]])
+            for i in range(2):
+                layer_list.extend([[512, 4, 4], [512, 4, 4], [2048, 4, 4]])
+        layer_list.append([100])
+        layer_sizes = [np.prod(size) for size in layer_list]
+        return layer_sizes
 
 
 class CIFAR100_MLP(CIFAR100_LIGHTNING):
@@ -182,12 +226,13 @@ class CIFAR100_MLP(CIFAR100_LIGHTNING):
         for i in range(num_layers -2):
             self.layer_sizes.append(width)
             net.extend([nn.Linear(width, width), nn.ReLU()])
-        self.layer_sizes.append(100)
-        net.append(nn.Linear(width, 100))
+        self.layer_sizes.append(10)
+        net.append(nn.Linear(width, 10))
         self.model = nn.Sequential(*net)
         self.softmax = nn.Softmax(dim=1)
         self.init_orthonormal()
 
+        self.automatic_optimization = True
         if self.norm_type == 'frob':
             self.target_norms = self.get_target_frob_norms()
             self.automatic_optimization = False

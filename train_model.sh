@@ -1,13 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=train_spec_norm
-#SBATCH --output=outLogs/train_model_%j.out
-#SBATCH --error=outLogs/train_model_%j.err
+#SBATCH --output=outLogs/train_model_%A_%a.out
+#SBATCH --error=outLogs/train_model_%A_%a.err
 #SBATCH --mem=100Gb
 #SBATCH -N 1
 #SBATCH --cpus-per-task=20
-#SBATCH --time=01:00:00
+#SBATCH --time=06:00:00
 #SBATCH --partition=normal
 #SBATCH --gres=gpu:a100:4
+#SBATCH --array=0
 
 source /etc/profile.d/modules.sh
 module use /cm/shared/modulefiles
@@ -21,5 +22,5 @@ source activate /om/user/rphess/conda_envs/pytorch_2_tv
 #module add openmind/cuda/12.3
 
 which python3
-python3 train.py --config MLP/configs/configs/mlp_5_2k_spec.yaml \
+python3 train.py --config configs/mlp_5_2k_baseline.yaml \
                  --gpus 4 --num_workers 5 \

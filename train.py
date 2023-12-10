@@ -3,6 +3,7 @@
 
 import pathlib
 from argparse import ArgumentParser
+import pickle
 import yaml
 import json
 import socket
@@ -28,6 +29,12 @@ def run_train(args):
         print("config file type not supported")
         print(args.config)
         return
+    # with open('model_configs_12_9.pkl', 'rb') as f:
+    #     config_paths = pickle.load(f)
+    # con_path = config_paths[args.job_id]
+
+    # with open(con_path, 'r') as file:
+    #     config = yaml.load(file, Loader=yaml.FullLoader)
 
     if 'data' in config.keys():
         if args.gpus > 0:
@@ -51,7 +58,8 @@ def run_train(args):
     else:
         ckpt_path = None
 
-    dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
+    # dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
+    dm = CIFAR10DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
 
     if config['model_type'] == 'ResNet':
         if ckpt_path is not None:
@@ -64,7 +72,7 @@ def run_train(args):
         else:
             model = CIFAR100_MLP(config['num_layers'], config['width'], config['norm_type'])
     os.makedirs(checkpoint_dir, exist_ok=True)
-    checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_dir, every_n_epochs=1, save_top_k=-1, verbose=True)
+    checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_dir, every_n_epochs=10, save_top_k=-1, save_weights_only=True)
     trainer = Trainer(default_root_dir=exp_dir, 
                       callbacks=checkpoint_callback, 
                       devices=args.gpus, 
@@ -79,7 +87,8 @@ def run_train(args):
 
 def cli_main():
     parser = ArgumentParser()
-    parser.add_argument('--config', type=str, help='Path to experiment config.')
+    parser.add_argument('--config', default=None, type=str, help='Path to experiment config.')
+    parser.add_argument('--job_id', type=int, help='Job ID for the experiment.')
     parser.add_argument(
         "--ckpt_path",
         default='',
