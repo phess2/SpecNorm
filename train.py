@@ -20,21 +20,21 @@ torch.set_float32_matmul_precision('medium')
 
 
 def run_train(args):
-    if (args.config.endswith(".json")):
-        with open(args.config, 'r') as file:
-            config = json.load(file)
-    elif (args.config.endswith(".yaml")):
-        config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
-    else:
-        print("config file type not supported")
-        print(args.config)
-        return
-    # with open('model_configs_12_9.pkl', 'rb') as f:
-    #     config_paths = pickle.load(f)
-    # con_path = config_paths[args.job_id]
+    # if (args.config.endswith(".json")):
+    #     with open(args.config, 'r') as file:
+    #         config = json.load(file)
+    # elif (args.config.endswith(".yaml")):
+    #     config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+    # else:
+    #     print("config file type not supported")
+    #     print(args.config)
+    #     return
+    with open('model_configs_12_11.pkl', 'rb') as f:
+        config_paths = pickle.load(f)
+    con_path = config_paths[args.job_id]
 
-    # with open(con_path, 'r') as file:
-    #     config = yaml.load(file, Loader=yaml.FullLoader)
+    with open(con_path, 'r') as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
 
     if 'data' in config.keys():
         if args.gpus > 0:
