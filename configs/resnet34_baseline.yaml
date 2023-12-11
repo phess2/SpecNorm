@@ -7,4 +7,5 @@ model_type: 'ResNet'
 model_size: 'ResNet34'
 norm_type: 'baseline'
 hparas:                                   # Experiment hyper-parameters
-  epochs: 50
+  epochs: 200
+  lr: .001

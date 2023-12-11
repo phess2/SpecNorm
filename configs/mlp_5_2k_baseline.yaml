@@ -9,3 +9,4 @@ width: 2000
 norm_type: 'baseline'
 hparas:                                   # Experiment hyper-parameters
   epochs: 200
+  lr: .001

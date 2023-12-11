@@ -22,5 +22,5 @@ source activate /om/user/rphess/conda_envs/pytorch_2_tv
 #module add openmind/cuda/12.3
 
 which python3
-python3 train.py --config configs/mlp_5_2k_baseline.yaml \
+python3 train.py --config configs/mlp_5_2k_frob.yaml \
                  --gpus 4 --num_workers 5 \

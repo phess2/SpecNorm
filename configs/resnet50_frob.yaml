@@ -7,4 +7,5 @@ model_type: 'ResNet'
 model_size: 'ResNet50'
 norm_type: 'frob'
 hparas:                                   # Experiment hyper-parameters
-  epochs: 50
+  epochs: 200
+  lr: .001

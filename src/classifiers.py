@@ -15,8 +15,9 @@ import pytorch_lightning as pl
 
 
 class CIFAR100_LIGHTNING(pl.LightningModule):
-    def __init__(self, norm):
+    def __init__(self, norm, lr=0.001):
         super(CIFAR100_LIGHTNING, self).__init__()
+        self.lr = lr
         self.norm_type = norm
         self.validation_step_outputs = []
         self.test_step_outputs = []
@@ -40,7 +41,7 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
                     if 'bn' in name or 'bias' in name or 'downsample' in name:
                         continue
                     else:
-                        param.data /= (torch.norm(param.data, p='fro') * self.target_norms[i])
+                        param.data *= (self.target_norms[i] / torch.norm(param.data, p='fro'))
             else:
                 for i, named_data in enumerate(self.named_parameters()):
                     name, param = named_data
@@ -57,9 +58,15 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         tensorboard_logs = {'train_loss':loss}
         return {'loss':loss, 'log':tensorboard_logs}
 
+    def on_train_epoch_end(self):
+        if not self.automatic_optimization:
+            sch = self.lr_schedulers()
+            sch.step()
+
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=0.01)
-        return [optimizer]
+        optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,40], gamma=0.1), 'interval': 'epoch'}
+        return [optimizer], [lr_scheduler]
 
     def validation_step(self, batch, batch_idx):
         data, target = batch
@@ -146,8 +153,8 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
 
 class CIFAR100_Resnet(CIFAR100_LIGHTNING):
     # This Module is based on Resnet for dataset CIFAR100
-    def __init__(self, model_size, norm):
-        super(CIFAR100_Resnet, self).__init__(norm)
+    def __init__(self, model_size, norm, lr=0.001):
+        super(CIFAR100_Resnet, self).__init__(norm, lr)
         if model_size == 'ResNet18':
             self.model = resnet18(Resnet.Bottleneck, [2,2,2,2], pretrained=False)
         elif model_size == 'ResNet34':
@@ -216,20 +223,19 @@ class CIFAR100_Resnet(CIFAR100_LIGHTNING):
 
 class CIFAR100_MLP(CIFAR100_LIGHTNING):
     # This Module is based on MLP for dataset CIFAR100
-    def __init__(self, num_layers, width, norm):
-        super(CIFAR100_MLP, self).__init__(norm)
+    def __init__(self, num_layers, width, norm, lr=0.001):
+        super(CIFAR100_MLP, self).__init__(norm, lr)
         self.num_layers = num_layers
         self.width = width
 
         self.layer_sizes = [3 * 32 * 32, width]
-        net = [nn.Flatten(), nn.Linear(self.layer_sizes[0], self.width), nn.ReLU()]
-        for i in range(num_layers -2):
+        net = [nn.Flatten(), nn.Linear(3072, self.width, bias=False), nn.ReLU()]
+        for i in range(num_layers - 2):
             self.layer_sizes.append(width)
-            net.extend([nn.Linear(width, width), nn.ReLU()])
-        self.layer_sizes.append(10)
-        net.append(nn.Linear(width, 10))
+            net.extend([nn.Linear(width, width, bias=False), nn.ReLU()])
+        self.layer_sizes.append(100)
+        net.append(nn.Linear(width, 100, bias=False))
         self.model = nn.Sequential(*net)
-        self.softmax = nn.Softmax(dim=1)
         self.init_orthonormal()
 
         self.automatic_optimization = True
@@ -243,5 +249,4 @@ class CIFAR100_MLP(CIFAR100_LIGHTNING):
             self.target_norms = None
 
     def forward(self, x):
-        output = self.model(x)
-        return self.softmax(output)
+        return self.model(x)

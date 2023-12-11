@@ -58,19 +58,19 @@ def run_train(args):
     else:
         ckpt_path = None
 
-    # dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
-    dm = CIFAR10DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
+    dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
+    # dm = CIFAR10DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
 
     if config['model_type'] == 'ResNet':
         if ckpt_path is not None:
-            model = CIFAR100_Resnet.load_from_checkpoint(checkpoint_path=ckpt_path, model_size=config['model_size'], norm=config['norm_type'])
+            model = CIFAR100_Resnet.load_from_checkpoint(checkpoint_path=ckpt_path, model_size=config['model_size'], norm=config['norm_type'], lr=config['hparas']['lr'])
         else:
-            model = CIFAR100_Resnet(config['model_size'], config['norm_type'])
+            model = CIFAR100_Resnet(config['model_size'], config['norm_type'], config['hparas']['lr'])
     else:
         if ckpt_path is not None:
-            model = CIFAR100_MLP.load_from_checkpoint(checkpoint_path=ckpt_path, num_layers=config['num_layers'], width=config['width'], norm=config['norm_type'])
+            model = CIFAR100_MLP.load_from_checkpoint(checkpoint_path=ckpt_path, num_layers=config['num_layers'], width=config['width'], norm=config['norm_type'], lr=config['hparas']['lr'])
         else:
-            model = CIFAR100_MLP(config['num_layers'], config['width'], config['norm_type'])
+            model = CIFAR100_MLP(config['num_layers'], config['width'], config['norm_type'], config['hparas']['lr'])
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_dir, every_n_epochs=10, save_top_k=-1, save_weights_only=True)
     trainer = Trainer(default_root_dir=exp_dir, 
