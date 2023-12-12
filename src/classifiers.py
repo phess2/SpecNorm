@@ -31,8 +31,8 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         output = self.forward(data)
         if self.automatic_optimization == False:
             opt = self.optimizers()
-            loss = F.cross_entropy(output,target)
             opt.zero_grad()
+            loss = F.cross_entropy(output,target)
             self.manual_backward(loss)
             opt.step()
             if self.norm_type == 'frob':
@@ -48,10 +48,17 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
                     if 'bn' in name or 'bias' in name or 'downsample' in name:
                         continue
                     else:
-                        first_val, right_vec = self.power_iteration(param.data.T@param.data)
-                        left_vec = param.data@right_vec/first_val
+                        if 'conv' in name:
+                            weight_mat = param.data.view(param.data.shape[0], -1)
+                            first_val, right_vec = self.power_iteration(weight_mat.T@weight_mat)
+                            left_vec = weight_mat@right_vec/first_val
+                            outer = torch.outer(left_vec, right_vec)
+                            outer = outer.view(param.data.shape)
+                        else:
+                            first_val, right_vec = self.power_iteration(param.data.T@param.data)
+                            left_vec = param.data@right_vec/first_val
+                            outer = torch.outer(left_vec, right_vec)
                         change = self.target_norms[i] - first_val
-                        outer = torch.outer(left_vec, right_vec)
                         param.data += (change * outer)
         else:
             loss = F.cross_entropy(output,target)
@@ -64,7 +71,7 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
             sch.step()
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
         lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60,120], gamma=0.1), 'interval': 'epoch'}
         return [optimizer], [lr_scheduler]
 
@@ -74,14 +81,15 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         loss = F.cross_entropy(output,target)
         pred = output.argmax(dim=1,keepdim=True)
         correct = pred.eq(target.view_as(pred)).sum().item()
-        self.validation_step_outputs.append({'val_loss':loss,'correct':correct})
+        self.validation_step_outputs.append({'val_loss':loss,'correct':correct, 'num_images': target.shape[0]})
         return {'val_loss':loss,'correct':correct}
 
     def on_validation_epoch_end(self):
         avg_loss = torch.stack([x['val_loss'] for x in self.validation_step_outputs]).mean()
         sum_correct = sum([x['correct'] for x in self.validation_step_outputs])
+        total_num = sum([x['num_images'] for x in self.validation_step_outputs])
         tensorboard_logs = {'val_loss':avg_loss}
-        print('Validation accuracy : ',sum_correct/10000,'\n\n')
+        print('Validation accuracy : ',sum_correct/total_num,'\n\n')
         self.validation_step_outputs.clear()
         return {'avg_val_loss':avg_loss, 'log':tensorboard_logs}    
 
@@ -90,15 +98,16 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
         output = self.forward(data)
         pred = output.argmax(dim=1,keepdim=True)
         correct = pred.eq(target.view_as(pred)).sum().item()
-        output = {'test_loss':F.cross_entropy(output,target), 'correct':correct}
+        output = {'test_loss':F.cross_entropy(output,target), 'correct':correct, 'num_images': target.shape[0]}
         self.test_step_outputs.append(output)
         return output
 
     def on_test_epoch_end(self):
         avg_loss = torch.stack([x['test_loss'] for x in self.test_step_outputs]).mean()
         sum_correct = sum([x['correct'] for x in self.test_step_outputs])
+        total_num = sum([x['num_images'] for x in self.test_step_outputs])
         tensorboard_logs = {'test_loss': avg_loss}
-        print('Test accuracy :',sum_correct/10000,'\n')
+        print('Test accuracy :',sum_correct/total_num,'\n')
         self.test_step_outputs.clear()
         return {'avg_test_loss': avg_loss, 'log': tensorboard_logs}
 
@@ -110,13 +119,11 @@ class CIFAR100_LIGHTNING(pl.LightningModule):
                 if 'bn' in name or 'bias' in name or 'downsample' in name:
                     continue
                 else:
-                    print(name)
                     nn.init.orthogonal_(param)
                     in_size = self.layer_sizes[layer_idx]
                     out_size = self.layer_sizes[layer_idx+1]
                     param.data *= (out_size / in_size)**0.5
                     layer_idx += 1
-        # print('final_idx:', layer_idx)
 
     def get_target_frob_norms(self):
         target_norms = dict()
@@ -172,7 +179,6 @@ class CIFAR100_Resnet(CIFAR100_LIGHTNING):
         self.model.maxpool = lambda x : x
         self.layer_sizes = self.resnet_layer_sizes(model_size)
         self.init_orthonormal()
-        print('layer_sizes:', self.layer_sizes)
 
         self.automatic_optimization = True
         if self.norm_type == 'frob':
@@ -189,20 +195,26 @@ class CIFAR100_Resnet(CIFAR100_LIGHTNING):
         if resnet_size == 'ResNet18':
             for i in range(4):
                 layer_list.append([64, 32, 32])
-            for i in range(4):
+            layer_list.append([128, 32, 32])
+            for i in range(3):
                 layer_list.append([128, 16, 16])
-            for i in range(4):
+            layer_list.append([256, 16, 16])
+            for i in range(3):
                 layer_list.append([256, 8, 8])
-            for i in range(4):
+            layer_list.append([512, 8, 8])
+            for i in range(3):
                 layer_list.append([512, 4, 4])
         if resnet_size == 'ResNet34':
             for i in range(6):
                 layer_list.append([64, 32, 32])
-            for i in range(8):
+            layer_list.append([128, 32, 32])
+            for i in range(7):
                 layer_list.append([128, 16, 16])
-            for i in range(12):
+            layer_list.append([256, 16, 16])
+            for i in range(11):
                 layer_list.append([256, 8, 8])
-            for i in range(6):
+            layer_list.append([512, 8, 8])
+            for i in range(5):
                 layer_list.append([512, 4, 4])
         if resnet_size == 'ResNet50':
             for i in range(3):

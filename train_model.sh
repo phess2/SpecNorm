@@ -8,7 +8,7 @@
 #SBATCH --time=1-00:00:00
 #SBATCH --partition=normal
 #SBATCH --gres=gpu:a100:4
-#SBATCH --array=6-11
+#SBATCH --array=0-11
 
 source /etc/profile.d/modules.sh
 module use /cm/shared/modulefiles

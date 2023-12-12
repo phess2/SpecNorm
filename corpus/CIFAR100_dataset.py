@@ -11,9 +11,9 @@ class CIFAR10DataModule(pl.LightningDataModule):
         super().__init__()
         self.mean = [0.4914, 0.4822, 0.4465]
         self.std = [0.2023, 0.1994, 0.2010]
-        self.transform = transforms.Compose([transforms.RandomCrop(32,padding=4),
-                                            transforms.RandomHorizontalFlip(),
-                                            transforms.ToTensor(),
+        # transforms.RandomCrop(32,padding=4),
+        #                                     transforms.RandomHorizontalFlip(),
+        self.transform = transforms.Compose([transforms.ToTensor(),
                                             transforms.Normalize(self.mean, self.std)])
         self.num_workers = num_workers
         self.batch_size = batch_size
@@ -61,12 +61,12 @@ class CIFAR100DataModule(pl.LightningDataModule):
         self.cifar_train = cifar_train
 
     def train_dataloader(self):
-        cifar_train = DataLoader(self.cifar_train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+        cifar_train = DataLoader(self.cifar_train, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True, pin_memory=True)
         return cifar_train
 
     def val_dataloader(self):
-        cifar_val = DataLoader(self.cifar_test, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        cifar_val = DataLoader(self.cifar_test, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, pin_memory=True)
         return cifar_val
 
     def test_dataloader(self):
-        return DataLoader(self.cifar_test, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(self.cifar_test, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, pin_memory=True)

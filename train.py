@@ -59,7 +59,6 @@ def run_train(args):
         ckpt_path = None
 
     dm = CIFAR100DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
-    # dm = CIFAR10DataModule(num_workers=args.num_workers, batch_size=config['data']['loader']['batch_size'])
 
     if config['model_type'] == 'ResNet':
         if ckpt_path is not None:

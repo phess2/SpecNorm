@@ -3,8 +3,10 @@ data:
   loader:
     batch_size: 512
 
-model_type: 'ResNet'
-model_size: 'ResNet18'
-norm_type: 'frob'
+model_type: 'MLP'
+num_layers: 7
+width: 4000
+norm_type: 'baseline'
 hparas:                                   # Experiment hyper-parameters
-  epochs: 50
+  epochs: 200
+  lr: .001
